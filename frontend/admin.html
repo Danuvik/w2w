@@ -1,0 +1,223 @@
+<!-- <!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Page</title>
+  <style>
+    body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  </style>
+</head>
+<body>
+  <h1>Admin Dashboard</h1>
+  <table id="requestsTable">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Address</th>
+        <th>Mobile</th>
+        <th>Items</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="script.js"></script>
+  <script>
+    async function loadRequests() {
+      try {
+        const requests = await fetchRequests();
+        const tbody = document.querySelector('#requestsTable tbody');
+        tbody.innerHTML = requests.map(req => `
+          <tr>
+            <td>${req.name}</td>
+            <td>${req.address}</td>
+            <td>${req.mobile}</td>
+            <td>${req.items.map(i => `${i.type} (${i.quantity}kg)`).join(', ')}</td>
+            <td>${new Date(req.timestamp).toLocaleString()}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load requests:', err);
+      }
+    }
+    loadRequests();
+  </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Dashboard</title>
+  <style>
+    body { font-family: Arial; max-width: 1200px; margin: 0 auto; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    .action-buttons { display: flex; gap: 8px; }
+    .accept-btn { 
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    .accept-btn:hover { background-color: #45a049; }
+    .accept-btn:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .delete-btn {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    .delete-btn:hover { background-color: #d32f2f; }
+    .status-pending { color: #FF9800; font-weight: bold; }
+    .status-accepted { color: #4CAF50; font-weight: bold; }
+    .status-rejected { color: #f44336; font-weight: bold; }
+    .refresh-btn {
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-bottom: 15px;
+    }
+    .refresh-btn:hover { background-color: #0b7dda; }
+  </style>
+</head>
+<body>
+  <h1>Admin Dashboard</h1>
+  <button class="refresh-btn" onclick="loadRequests()">Refresh Requests</button>
+  
+  <table id="requestsTable">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Address</th>
+        <th>Mobile</th>
+        <th>Items</th>
+        <th>Status</th>
+        <th>Date</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="script.js"></script>
+  <script>
+    // Enhanced request handling with status persistence
+    async function loadRequests() {
+      try {
+        const response = await fetch('http://localhost:5000/api/requests');
+        if (!response.ok) throw new Error('Failed to fetch requests');
+        
+        const requests = await response.json();
+        renderRequests(requests);
+      } catch (err) {
+        console.error('Error loading requests:', err);
+        alert('Error loading requests. Please try again.');
+      }
+    }
+
+    function renderRequests(requests) {
+      const tbody = document.querySelector('#requestsTable tbody');
+      tbody.innerHTML = requests.map(req => {
+        const date = new Date(req.timestamp).toLocaleString();
+        const status = req.status || 'pending';
+        
+        return `
+          <tr data-id="${req._id}">
+            <td>${req.name}</td>
+            <td>${req.address}</td>
+            <td>${req.mobile}</td>
+            <td>${req.items.map(i => `${i.type} (${i.quantity}kg)`).join(', ')}</td>
+            <td class="status-${status}">${capitalizeFirstLetter(status)}</td>
+            <td>${date}</td>
+            <td class="action-buttons">
+              <button class="accept-btn" 
+                ${status === 'accepted' ? 'disabled' : ''}
+                onclick="handleAccept('${req._id}')">
+                ${status === 'accepted' ? 'Accepted' : 'Accept'}
+              </button>
+              <button class="delete-btn" onclick="handleDelete('${req._id}')">
+                Delete
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function capitalizeFirstLetter(string) {
+      return string.charAt(0).toUpperCase() + string.slice(1);
+    }
+
+    async function handleAccept(requestId) {
+      try {
+        const response = await fetch(`http://localhost:5000/api/requests/${requestId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'accepted' })
+        });
+
+        if (!response.ok) throw new Error('Failed to update status');
+        
+        const updatedRequest = await response.json();
+        updateRequestRow(updatedRequest);
+      } catch (err) {
+        console.error('Error accepting request:', err);
+        alert('Failed to accept request. Please try again.');
+      }
+    }
+
+    async function handleDelete(requestId) {
+      if (!confirm('Are you sure you want to delete this request?')) return;
+      
+      try {
+        const response = await fetch(`http://localhost:5000/api/requests/${requestId}`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete request');
+        
+        document.querySelector(`tr[data-id="${requestId}"]`)?.remove();
+      } catch (err) {
+        console.error('Error deleting request:', err);
+        alert('Failed to delete request. Please try again.');
+      }
+    }
+
+    function updateRequestRow(updatedRequest) {
+      const row = document.querySelector(`tr[data-id="${updatedRequest._id}"]`);
+      if (!row) return;
+      
+      const statusCell = row.querySelector('td:nth-child(5)');
+      const acceptBtn = row.querySelector('.accept-btn');
+      const status = updatedRequest.status || 'pending';
+      
+      statusCell.textContent = capitalizeFirstLetter(status);
+      statusCell.className = `status-${status}`;
+      
+      if (status === 'accepted') {
+        acceptBtn.textContent = 'Accepted';
+        acceptBtn.disabled = true;
+      }
+    }
+
+    // Initial load
+    document.addEventListener('DOMContentLoaded', loadRequests);
+  </script>
+</body>
+</html>

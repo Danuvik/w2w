@@ -1,0 +1,217 @@
+<!-- <!DOCTYPE html>
+<html>
+<head>
+  <title>Delivery Page</title>
+  <style>
+    body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
+    .request-card { 
+      background: #f9f9f9; 
+      padding: 15px; 
+      margin: 10px 0; 
+      border-radius: 5px; 
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <h1>Delivery Partner</h1>
+  <div id="requestsList"></div>
+
+  <script src="script.js"></script>
+  <script>
+    async function loadRequests() {
+      try {
+        const requests = await fetchRequests();
+        const requestsList = document.getElementById('requestsList');
+        requestsList.innerHTML = requests.map(req => `
+          <div class="request-card">
+            <h3>${req.name}</h3>
+            <p><strong>Address:</strong> ${req.address}</p>
+            <p><strong>Mobile:</strong> ${req.mobile}</p>
+            <p><strong>Items:</strong> ${req.items.map(i => `${i.type} (${i.quantity}kg)`).join(', ')}</p>
+            <p><strong>Time:</strong> ${new Date(req.timestamp).toLocaleString()}</p>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load requests:', err);
+      }
+    }
+    loadRequests();
+  </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Delivery Page</title>
+  <style>
+    body { font-family: Arial; max-width: 1000px; margin: 0 auto; padding: 20px; }
+    .request-card { 
+      background: #f9f9f9; 
+      padding: 15px; 
+      margin: 10px 0; 
+      border-radius: 5px; 
+      border: 1px solid #ddd;
+    }
+    #map { height: 400px; width: 100%; margin-bottom: 20px; border: 1px solid #ddd; }
+    .complete-btn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .no-orders { color: #666; text-align: center; margin-top: 20px; }
+    .loading { color: #666; text-align: center; font-style: italic; }
+  </style>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+  <h1>Delivery Partner Dashboard</h1>
+  <div id="map"></div>
+  <div id="requestsList"></div>
+
+  <script src="script.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    let map;
+    let markers = [];
+    const DEFAULT_COORDS = [12.9716, 77.5946]; // Default coordinates (Bangalore)
+
+    async function loadRequests() {
+      try {
+        document.getElementById('requestsList').innerHTML = '<p class="loading">Loading orders...</p>';
+        
+        const response = await fetch('http://localhost:5000/api/requests?status=accepted');
+        const requests = await response.json();
+        const requestsList = document.getElementById('requestsList');
+        
+        if (requests.length === 0) {
+          requestsList.innerHTML = '<p class="no-orders">No accepted orders available for delivery</p>';
+          initMap(DEFAULT_COORDS); // Show default map view
+          return;
+        }
+
+        // Initialize map if not already done
+        if (!map) {
+          initMap(DEFAULT_COORDS);
+        }
+
+        // Clear previous markers
+        clearMarkers();
+
+        requestsList.innerHTML = '';
+        
+        // Process each request
+        for (const req of requests) {
+          await renderRequest(req);
+        }
+
+        // Fit map to show all markers
+        if (markers.length > 0) {
+          const group = new L.featureGroup(markers);
+          map.fitBounds(group.getBounds());
+        }
+
+      } catch (err) {
+        console.error('Error loading requests:', err);
+        document.getElementById('requestsList').innerHTML = 
+          '<p class="no-orders">Error loading orders. Please try again.</p>';
+      }
+    }
+
+    function initMap(centerCoords) {
+      map = L.map('map').setView(centerCoords, 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+    }
+
+    function clearMarkers() {
+      markers.forEach(marker => map.removeLayer(marker));
+      markers = [];
+    }
+
+    async function renderRequest(req) {
+      const requestsList = document.getElementById('requestsList');
+      const card = document.createElement('div');
+      card.className = 'request-card';
+      card.dataset.id = req._id;
+      
+      card.innerHTML = `
+        <h3>Order #${req._id.toString().substring(18, 24)}</h3>
+        <p><strong>Customer:</strong> ${req.name}</p>
+        <p><strong>Address:</strong> ${req.address}</p>
+        <p><strong>Contact:</strong> ${req.mobile}</p>
+        <p><strong>Items:</strong> ${req.items.map(i => `${i.type} (${i.quantity}kg)`).join(', ')}</p>
+        <button class="complete-btn" onclick="completeDelivery('${req._id}')">Mark as Delivered</button>
+      `;
+      
+      requestsList.appendChild(card);
+
+      // Geocode address if coordinates not already saved
+      if (!req.coordinates) {
+        await geocodeAndPlot(req._id, req.address);
+      } else {
+        addMarker(req.coordinates, req);
+      }
+    }
+
+    async function geocodeAndPlot(requestId, address) {
+      try {
+        const response = await fetch(`http://localhost:5000/api/geocode?address=${encodeURIComponent(address)}`);
+        const location = await response.json();
+        
+        if (location.lat && location.lng) {
+          // Save coordinates to database
+          await fetch(`http://localhost:5000/api/requests/${requestId}/coordinates`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat: location.lat, lng: location.lng })
+          });
+          
+          addMarker({ lat: location.lat, lng: location.lng }, { _id: requestId, address });
+        }
+      } catch (err) {
+        console.error('Geocoding failed:', err);
+      }
+    }
+
+    function addMarker(coords, request) {
+      const marker = L.marker([coords.lat, coords.lng]).addTo(map)
+        .bindPopup(`<b>Order #${request._id.toString().substring(18, 24)}</b><br>${request.address}`);
+      markers.push(marker);
+    }
+
+    async function completeDelivery(requestId) {
+      if (!confirm('Mark this order as completed?')) return;
+      
+      try {
+        const response = await fetch(`http://localhost:5000/api/requests/${requestId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'completed' })
+        });
+
+        if (response.ok) {
+          document.querySelector(`.request-card[data-id="${requestId}"]`)?.remove();
+          loadRequests(); // Refresh the list and map
+        } else {
+          throw new Error('Failed to complete delivery');
+        }
+      } catch (err) {
+        console.error('Error completing delivery:', err);
+        alert('Failed to complete delivery. Please try again.');
+      }
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', loadRequests);
+  </script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!-- <!DOCTYPE html>
+<html>
+<head>
+  <title>User Page</title>
+  <style>
+    body { font-family: Arial; max-width: 500px; margin: 0 auto; padding: 20px; }
+    input, button { width: 100%; padding: 10px; margin: 5px 0; }
+  </style>
+</head>
+<body>
+  <h1>Submit Request</h1>
+  <form id="requestForm">
+    <input type="text" id="name" placeholder="Name" required>
+    <input type="text" id="address" placeholder="Address" required>
+    <input type="tel" id="mobile" placeholder="Mobile Number" required>
+    
+    <div>
+      <label><input type="checkbox" class="item" value="iron"> Iron</label>
+      <label><input type="checkbox" class="item" value="plastic"> Plastic</label>
+      <label><input type="checkbox" class="item" value="e-waste"> E-Waste</label>
+    </div>
+
+    <div id="quantityFields"></div>
+    <button type="submit">Submit Request</button>
+  </form>
+
+  <script src="script.js"></script>
+  <script>
+    document.querySelectorAll('.item').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        const id = e.target.value;
+        const field = document.createElement('input');
+        field.type = 'number';
+        field.id = `${id}_qty`;
+        field.placeholder = `${id} quantity (kg)`;
+        field.required = true;
+        document.getElementById('quantityFields').appendChild(field);
+      });
+    });
+
+    document.getElementById('requestForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const items = Array.from(document.querySelectorAll('.item:checked')).map(item => ({
+        type: item.value,
+        quantity: document.getElementById(`${item.value}_qty`).value
+      }));
+
+      const request = {
+        name: document.getElementById('name').value,
+        address: document.getElementById('address').value,
+        mobile: document.getElementById('mobile').value,
+        items
+      };
+
+      try {
+        await submitRequest(request);
+        alert('Request submitted!');
+        window.location.reload();
+      } catch (err) {
+        alert('Error: Could not submit request.');
+      }
+    });
+  </script>
+</body>
+</html> -->
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>User Page</title>
+  <style>
+    body { font-family: Arial; max-width: 500px; margin: 0 auto; padding: 20px; }
+    input, button { width: 100%; padding: 10px; margin: 5px 0; }
+    .location-container { display: flex; gap: 10px; }
+    #address { flex: 1; }
+    #getLocation { width: auto; white-space: nowrap; }
+    #locationStatus { 
+      font-size: 0.9em; 
+      color: #666; 
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Submit Request</h1>
+  <form id="requestForm">
+    <input type="text" id="name" placeholder="Name" required>
+    
+    <div class="location-container">
+      <input type="text" id="address" placeholder="Address" required>
+      <button type="button" id="getLocation">📍</button>
+    </div>
+    <div id="locationStatus"></div>
+    
+    <input type="tel" id="mobile" placeholder="Mobile Number" required>
+    
+    <div>
+      <label><input type="checkbox" class="item" value="iron"> Iron</label>
+      <label><input type="checkbox" class="item" value="plastic"> Plastic</label>
+      <label><input type="checkbox" class="item" value="e-waste"> E-Waste</label>
+    </div>
+
+    <div id="quantityFields"></div>
+    <button type="submit">Submit Request</button>
+  </form>
+
+  <script src="script.js"></script>
+  <script>
+    document.getElementById('getLocation').addEventListener('click', async () => {
+      const statusElement = document.getElementById('locationStatus');
+      statusElement.textContent = "Detecting your location...";
+      
+      if (!navigator.geolocation) {
+        statusElement.textContent = "Geolocation is not supported by your browser";
+        return;
+      }
+
+      try {
+        // Get current position
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+
+        statusElement.textContent = "Looking up your address...";
+        
+        // Convert coordinates to address using OpenStreetMap
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`
+        );
+        
+        const data = await response.json();
+        
+        if (data.display_name) {
+          document.getElementById('address').value = data.display_name;
+          statusElement.textContent = "Location found!";
+        } else {
+          throw new Error("Could not determine address");
+        }
+      } catch (err) {
+        console.error("Location error:", err);
+        statusElement.textContent = "Error: " + err.message;
+      }
+    });
+
+    // Existing checkbox and form submission code
+    document.querySelectorAll('.item').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        const id = e.target.value;
+        const field = document.createElement('input');
+        field.type = 'number';
+        field.id = `${id}_qty`;
+        field.placeholder = `${id} quantity (kg)`;
+        field.required = true;
+        document.getElementById('quantityFields').appendChild(field);
+      });
+    });
+
+    document.getElementById('requestForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const items = Array.from(document.querySelectorAll('.item:checked')).map(item => ({
+        type: item.value,
+        quantity: document.getElementById(`${item.value}_qty`).value
+      }));
+
+      const request = {
+        name: document.getElementById('name').value,
+        address: document.getElementById('address').value,
+        mobile: document.getElementById('mobile').value,
+        items
+      };
+
+      try {
+        await submitRequest(request);
+        alert('Request submitted!');
+        window.location.reload();
+      } catch (err) {
+        alert('Error: Could not submit request.');
+      }
+    });
+  </script>
+</body>
+</html>
